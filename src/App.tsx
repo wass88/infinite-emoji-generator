@@ -79,7 +79,11 @@ function App() {
         />
         <EmojiPalette
           selectedEmojis={selectedEmojis}
-          onSelectionChange={setSelectedEmojis}
+          onSelectionChange={(emojis) => {
+            // Single-select: pick the newly added emoji
+            const added = emojis.find(e => !selectedEmojis.includes(e))
+            setSelectedEmojis(added ? [added] : emojis.slice(0, 1))
+          }}
         />
       </div>
       <div className="canvas-area">
