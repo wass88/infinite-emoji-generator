@@ -6,6 +6,7 @@ interface TilingCanvasProps {
   group: WallpaperGroup;
   emojiUrl: string;
   cellSize?: number;
+  emojiScale?: number;
   emojiU?: number;
   emojiV?: number;
 }
@@ -14,6 +15,7 @@ export function TilingCanvas({
   group,
   emojiUrl,
   cellSize = 120,
+  emojiScale = 0.4,
   emojiU = 0.3,
   emojiV = 0.2,
 }: TilingCanvasProps) {
@@ -47,7 +49,7 @@ export function TilingCanvas({
       group,
       emojiImg: img,
       cellSize,
-      emojiSize: cellSize * 0.4,
+      emojiSize: cellSize * emojiScale,
       viewportWidth: w,
       viewportHeight: h,
       offsetX: offsetRef.current.x,
@@ -55,7 +57,7 @@ export function TilingCanvas({
       emojiU,
       emojiV,
     });
-  }, [group, cellSize, emojiU, emojiV]);
+  }, [group, cellSize, emojiScale, emojiU, emojiV]);
 
   // Load emoji image
   useEffect(() => {

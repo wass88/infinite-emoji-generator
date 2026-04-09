@@ -7,28 +7,35 @@ interface CellEditorProps {
   emojiUrl: string;
   emojiU: number;
   emojiV: number;
+  emojiScale: number;
   onPositionChange: (u: number, v: number) => void;
+  onScaleChange: (scale: number) => void;
 }
 
 const SIZE = 280;
 const PAD = 30;
+const HANDLE_R = 5;
+const HANDLE_HIT = 12;
 
-export function CellEditor({ group, emojiUrl, emojiU, emojiV, onPositionChange }: CellEditorProps) {
+type DragMode = 'none' | 'move' | 'resize';
+
+export function CellEditor({
+  group, emojiUrl, emojiU, emojiV, emojiScale,
+  onPositionChange, onScaleChange,
+}: CellEditorProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
-  const draggingRef = useRef(false);
+  const modeRef = useRef<DragMode>('none');
 
   const getTransform = useCallback(() => {
     const [ax, ay] = group.latticeA;
     const [bx, by] = group.latticeB;
     const corners = [[0, 0], [ax, ay], [ax + bx, ay + by], [bx, by]];
-
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
     for (const [x, y] of corners) {
       minX = Math.min(minX, x); maxX = Math.max(maxX, x);
       minY = Math.min(minY, y); maxY = Math.max(maxY, y);
     }
-
     const avail = SIZE - 2 * PAD;
     const scale = Math.min(avail / (maxX - minX), avail / (maxY - minY));
     return {
@@ -58,6 +65,23 @@ export function CellEditor({ group, emojiUrl, emojiU, emojiV, onPositionChange }
     const det = ax * by - bx * ay;
     return [(wx * by - wy * bx) / det, (wy * ax - wx * ay) / det];
   }, [group, getTransform]);
+
+  /** Emoji display size in canvas pixels */
+  const emojiPx = useCallback(() => {
+    return emojiScale * getTransform().scale;
+  }, [emojiScale, getTransform]);
+
+  /** Corner handle positions (canvas coords) */
+  const handlePositions = useCallback((): [number, number][] => {
+    const [cx, cy] = toCanvas(...toWorld(emojiU, emojiV));
+    const half = emojiPx() / 2;
+    return [
+      [cx - half, cy - half],
+      [cx + half, cy - half],
+      [cx + half, cy + half],
+      [cx - half, cy + half],
+    ];
+  }, [toCanvas, toWorld, emojiU, emojiV, emojiPx]);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -100,17 +124,37 @@ export function CellEditor({ group, emojiUrl, emojiU, emojiV, onPositionChange }
 
     // Emoji
     const img = imgRef.current;
+    const s = emojiPx();
+    const [ecx, ecy] = toCanvas(...toWorld(emojiU, emojiV));
+
     if (img?.complete && img.naturalWidth > 0) {
-      const [cx, cy] = toCanvas(...toWorld(emojiU, emojiV));
-      const s = 36;
-      ctx.drawImage(img, cx - s / 2, cy - s / 2, s, s);
+      ctx.drawImage(img, ecx - s / 2, ecy - s / 2, s, s);
     }
 
-    // Coordinate label
+    // Bounding box
+    ctx.strokeStyle = '#2563eb';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    ctx.strokeRect(ecx - s / 2, ecy - s / 2, s, s);
+    ctx.setLineDash([]);
+
+    // Corner handles
+    const handles = handlePositions();
+    for (const [hx, hy] of handles) {
+      ctx.fillStyle = '#fff';
+      ctx.strokeStyle = '#2563eb';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(hx, hy, HANDLE_R, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    // Label
     ctx.fillStyle = '#999';
     ctx.font = '10px monospace';
-    ctx.fillText(`(${emojiU.toFixed(2)}, ${emojiV.toFixed(2)})`, 4, SIZE - 4);
-  }, [emojiU, emojiV, toCanvas, toWorld]);
+    ctx.fillText(`pos(${emojiU.toFixed(2)}, ${emojiV.toFixed(2)})  size ${(emojiScale * 100).toFixed(0)}%`, 4, SIZE - 4);
+  }, [emojiU, emojiV, emojiScale, toCanvas, toWorld, emojiPx, handlePositions]);
 
   useEffect(() => {
     const img = new Image();
@@ -122,21 +166,53 @@ export function CellEditor({ group, emojiUrl, emojiU, emojiV, onPositionChange }
 
   useEffect(() => { draw(); }, [draw]);
 
-  const handlePointer = useCallback(
-    (e: React.PointerEvent, down?: boolean) => {
-      if (down) {
-        draggingRef.current = true;
-        canvasRef.current?.setPointerCapture(e.pointerId);
-      }
-      if (!draggingRef.current) return;
-      const rect = canvasRef.current!.getBoundingClientRect();
-      let [u, v] = toLattice(e.clientX - rect.left, e.clientY - rect.top);
+  const hitTestHandle = useCallback((cx: number, cy: number): boolean => {
+    return handlePositions().some(
+      ([hx, hy]) => Math.abs(cx - hx) < HANDLE_HIT && Math.abs(cy - hy) < HANDLE_HIT,
+    );
+  }, [handlePositions]);
+
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    canvasRef.current?.setPointerCapture(e.pointerId);
+    const rect = canvasRef.current!.getBoundingClientRect();
+    const cx = e.clientX - rect.left;
+    const cy = e.clientY - rect.top;
+    modeRef.current = hitTestHandle(cx, cy) ? 'resize' : 'move';
+  }, [hitTestHandle]);
+
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    if (modeRef.current === 'none') return;
+    const rect = canvasRef.current!.getBoundingClientRect();
+    const cx = e.clientX - rect.left;
+    const cy = e.clientY - rect.top;
+
+    if (modeRef.current === 'move') {
+      let [u, v] = toLattice(cx, cy);
       u = Math.max(0, Math.min(1, u));
       v = Math.max(0, Math.min(1, v));
       onPositionChange(u, v);
-    },
-    [toLattice, onPositionChange],
-  );
+    } else {
+      // Resize: distance from emoji center → new scale
+      const [ecx, ecy] = toCanvas(...toWorld(emojiU, emojiV));
+      const dist = Math.max(Math.abs(cx - ecx), Math.abs(cy - ecy));
+      const newScale = (dist * 2) / getTransform().scale;
+      onScaleChange(Math.max(0.08, Math.min(1.2, newScale)));
+    }
+  }, [toLattice, toCanvas, toWorld, emojiU, emojiV, getTransform, onPositionChange, onScaleChange]);
+
+  const handlePointerUp = useCallback(() => {
+    modeRef.current = 'none';
+  }, []);
+
+  // Dynamic cursor
+  const handlePointerHover = useCallback((e: React.PointerEvent) => {
+    if (modeRef.current !== 'none') return;
+    const rect = canvasRef.current!.getBoundingClientRect();
+    const cx = e.clientX - rect.left;
+    const cy = e.clientY - rect.top;
+    const canvas = canvasRef.current!;
+    canvas.style.cursor = hitTestHandle(cx, cy) ? 'nwse-resize' : 'crosshair';
+  }, [hitTestHandle]);
 
   return (
     <div className="cell-editor">
@@ -144,10 +220,13 @@ export function CellEditor({ group, emojiUrl, emojiU, emojiV, onPositionChange }
       <canvas
         ref={canvasRef}
         style={{ width: SIZE, height: SIZE, cursor: 'crosshair' }}
-        onPointerDown={(e) => handlePointer(e, true)}
-        onPointerMove={handlePointer}
-        onPointerUp={() => { draggingRef.current = false; }}
-        onPointerCancel={() => { draggingRef.current = false; }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={(e) => {
+          handlePointerHover(e);
+          handlePointerMove(e);
+        }}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
       />
     </div>
   );

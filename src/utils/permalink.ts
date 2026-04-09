@@ -14,6 +14,7 @@ export interface PermalinkState {
   group?: string;
   u?: number;
   v?: number;
+  scale?: number;
 }
 
 export function encodePermalink(state: PermalinkState): string {
@@ -22,6 +23,7 @@ export function encodePermalink(state: PermalinkState): string {
   if (state.group) params.set('group', state.group);
   if (state.u != null) params.set('u', state.u.toFixed(3));
   if (state.v != null) params.set('v', state.v.toFixed(3));
+  if (state.scale != null) params.set('scale', state.scale.toFixed(3));
   return `${window.location.pathname}?${params.toString()}`;
 }
 
@@ -36,5 +38,7 @@ export function decodePermalink(): PermalinkState {
   if (u) result.u = parseFloat(u);
   const v = params.get('v');
   if (v) result.v = parseFloat(v);
+  const scale = params.get('scale');
+  if (scale) result.scale = parseFloat(scale);
   return result;
 }
