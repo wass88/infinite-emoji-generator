@@ -84,6 +84,7 @@ function App() {
           emojiScale={emojiScale}
           emojiU={emojiPos.u}
           emojiV={emojiPos.v}
+          onScaleChange={setEmojiScale}
         />
       </div>
     </div>

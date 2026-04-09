@@ -38,7 +38,13 @@ export interface RenderParams {
   emojiV: number;
 }
 
-export function renderTiling(ctx: CanvasRenderingContext2D, params: RenderParams): void {
+/** Canvas position of a rendered emoji (closest to viewport center) */
+export interface FocusEmoji {
+  cx: number;
+  cy: number;
+}
+
+export function renderTiling(ctx: CanvasRenderingContext2D, params: RenderParams): FocusEmoji | null {
   const {
     group, emojiImg, cellSize, emojiSize,
     viewportWidth, viewportHeight,
@@ -92,6 +98,10 @@ export function renderTiling(ctx: CanvasRenderingContext2D, params: RenderParams
   ctx.clearRect(0, 0, viewportWidth, viewportHeight);
 
   const halfEmoji = emojiSize / 2;
+  const midX = viewportWidth / 2;
+  const midY = viewportHeight / 2;
+  let bestDist = Infinity;
+  let focus: FocusEmoji | null = null;
 
   for (let i = i0; i <= i1; i++) {
     for (let j = j0; j <= j1; j++) {
@@ -113,12 +123,20 @@ export function renderTiling(ctx: CanvasRenderingContext2D, params: RenderParams
         const m = worldMatrices[k];
         ctx.save();
         ctx.translate(cx, cy);
-        // Apply the 2x2 world matrix: canvas transform(a, b, c, d, e, f)
-        // maps canvas (a,c) to column 1, (b,d) to column 2
         ctx.transform(m.a, m.c, m.b, m.d, 0, 0);
         ctx.drawImage(emojiImg, -halfEmoji, -halfEmoji, emojiSize, emojiSize);
         ctx.restore();
+
+        // Track the emoji closest to viewport center
+        const dx = cx - midX, dy = cy - midY;
+        const d = dx * dx + dy * dy;
+        if (d < bestDist) {
+          bestDist = d;
+          focus = { cx, cy };
+        }
       }
     }
   }
+
+  return focus;
 }
