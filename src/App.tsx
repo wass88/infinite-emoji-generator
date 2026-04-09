@@ -5,7 +5,7 @@ import { GroupSelector } from './components/GroupSelector'
 import { CellEditor } from './components/CellEditor'
 import { Toolbar } from './components/Toolbar'
 import { emojiToTwemojiUrl } from './data/emoji'
-import { WALLPAPER_GROUPS, getGroup } from './wallpaper/groups'
+import { WALLPAPER_GROUPS, getGroup, isAspectLocked } from './wallpaper/groups'
 import type { WallpaperGroup } from './wallpaper/types'
 import { decodePermalink, encodePermalink } from './utils/permalink'
 import { exportPng } from './utils/export'
@@ -65,7 +65,11 @@ function App() {
       <div className="sidebar">
         <h1 className="app-title">Infinite Emoji</h1>
         <Toolbar onExportPng={handleExportPng} onCopyLink={handleCopyLink} />
-        <GroupSelector selected={group} onSelect={setGroup} />
+        <GroupSelector selected={group} onSelect={(g) => {
+          setGroup(g)
+          // Reset aspect when switching to a locked group
+          if (isAspectLocked(g)) setCellAspect(1)
+        }} />
         <CellEditor
           group={group}
           emojiUrl={emojiUrl}

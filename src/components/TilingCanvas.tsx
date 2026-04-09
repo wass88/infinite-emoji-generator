@@ -76,16 +76,16 @@ export function TilingCanvas({
     ];
   }, [emojiSize]);
 
-  /** Cell-aspect handle: right edge midpoint of focus cell */
-  const aspectHandle = useCallback((): [number, number] | null => {
+  /** Cell-aspect handles: 3 corners of focus cell (excluding origin) */
+  const aspectHandles = useCallback((): [number, number][] => {
     const f = focusRef.current;
-    if (!f || aspectLocked) return null;
-    const { sax, say, sbx, sby } = scaledLattice();
+    if (!f || aspectLocked) return [];
     return [
-      (f.cellI + 1) * sax + (f.cellJ + 0.5) * sbx - offsetRef.current.x,
-      (f.cellI + 1) * say + (f.cellJ + 0.5) * sby - offsetRef.current.y,
+      cellCorner(f.cellI + 1, f.cellJ),     // bottom-right
+      cellCorner(f.cellI + 1, f.cellJ + 1), // top-right
+      cellCorner(f.cellI, f.cellJ + 1),     // top-left
     ];
-  }, [aspectLocked, scaledLattice]);
+  }, [aspectLocked, cellCorner]);
 
   const drawOverlay = useCallback((ctx: CanvasRenderingContext2D) => {
     const f = focusRef.current;
@@ -132,22 +132,17 @@ export function TilingCanvas({
       ctx.stroke();
       ctx.setLineDash([]);
 
-      const ah = aspectHandle();
-      if (ah) {
+      for (const [hx, hy] of aspectHandles()) {
         ctx.beginPath();
-        ctx.arc(ah[0], ah[1], HANDLE_R + 1, 0, Math.PI * 2);
+        ctx.arc(hx, hy, HANDLE_R + 1, 0, Math.PI * 2);
         ctx.fillStyle = '#fff';
         ctx.fill();
         ctx.strokeStyle = '#ea580c';
         ctx.lineWidth = 2;
         ctx.stroke();
-        // Arrow hint
-        ctx.fillStyle = '#ea580c';
-        ctx.font = '10px sans-serif';
-        ctx.fillText('\u2194', ah[0] - 5, ah[1] + 3);
       }
     }
-  }, [emojiSize, emojiHandles, aspectHandle, aspectLocked, cellCorner, onScaleChange, onAspectChange]);
+  }, [emojiSize, emojiHandles, aspectHandles, aspectLocked, cellCorner, onScaleChange, onAspectChange]);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -211,10 +206,9 @@ export function TilingCanvas({
   }, [emojiHandles]);
 
   const hitAspect = useCallback((cx: number, cy: number): boolean => {
-    const ah = aspectHandle();
-    if (!ah) return false;
-    return Math.abs(cx - ah[0]) < HANDLE_HIT && Math.abs(cy - ah[1]) < HANDLE_HIT;
-  }, [aspectHandle]);
+    return aspectHandles().some(([hx, hy]) =>
+      Math.abs(cx - hx) < HANDLE_HIT && Math.abs(cy - hy) < HANDLE_HIT);
+  }, [aspectHandles]);
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     const canvas = canvasRef.current;

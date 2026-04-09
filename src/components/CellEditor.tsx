@@ -83,12 +83,13 @@ export function CellEditor({
     ];
   }, [toCanvas, toWorld, emojiU, emojiV, emojiPx]);
 
-  /** Cell edge midpoint handles for aspect (right + top) */
-  const cellEdgeHandles = useCallback((): [number, number][] => {
+  /** Cell corner handles for aspect */
+  const cellCornerHandles = useCallback((): [number, number][] => {
     if (locked) return [];
     return [
-      toCanvas(...toWorld(1, 0.5)),   // right edge mid
-      toCanvas(...toWorld(0.5, 1)),   // top edge mid
+      toCanvas(...toWorld(1, 0)),   // bottom-right
+      toCanvas(...toWorld(1, 1)),   // top-right
+      toCanvas(...toWorld(0, 1)),   // top-left
     ];
   }, [locked, toCanvas, toWorld]);
 
@@ -129,9 +130,9 @@ export function CellEditor({
       ctx.beginPath(); ctx.moveTo(b0x, b0y); ctx.lineTo(b1x, b1y); ctx.stroke();
     }
 
-    // Cell edge aspect handles (orange)
-    const edgeH = cellEdgeHandles();
-    for (const [hx, hy] of edgeH) {
+    // Cell corner aspect handles (orange)
+    const cornerH = cellCornerHandles();
+    for (const [hx, hy] of cornerH) {
       ctx.beginPath();
       ctx.arc(hx, hy, HANDLE_R + 1, 0, Math.PI * 2);
       ctx.fillStyle = '#fff';
@@ -174,7 +175,7 @@ export function CellEditor({
       ? `pos(${emojiU.toFixed(2)}, ${emojiV.toFixed(2)})  size ${(emojiScale * 100).toFixed(0)}%`
       : `pos(${emojiU.toFixed(2)}, ${emojiV.toFixed(2)})  size ${(emojiScale * 100).toFixed(0)}%  ratio ${cellAspect.toFixed(2)}`;
     ctx.fillText(info, 4, SIZE - 4);
-  }, [emojiU, emojiV, emojiScale, cellAspect, locked, toCanvas, toWorld, emojiPx, emojiHandles, cellEdgeHandles]);
+  }, [emojiU, emojiV, emojiScale, cellAspect, locked, toCanvas, toWorld, emojiPx, emojiHandles, cellCornerHandles]);
 
   useEffect(() => {
     const img = new Image();
@@ -193,10 +194,10 @@ export function CellEditor({
   }, [emojiHandles]);
 
   const hitEdge = useCallback((cx: number, cy: number): boolean => {
-    return cellEdgeHandles().some(
+    return cellCornerHandles().some(
       ([hx, hy]) => Math.abs(cx - hx) < HANDLE_HIT && Math.abs(cy - hy) < HANDLE_HIT,
     );
-  }, [cellEdgeHandles]);
+  }, [cellCornerHandles]);
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     canvasRef.current?.setPointerCapture(e.pointerId);
