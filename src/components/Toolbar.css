@@ -1,0 +1,24 @@
+.toolbar {
+  display: flex;
+  gap: 6px;
+}
+
+.toolbar-btn {
+  padding: 6px 14px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.toolbar-btn:hover {
+  background: #f0f0f0;
+  border-color: #aaa;
+}
+
+.toolbar-btn:active {
+  background: #e0e0e0;
+}

@@ -1,29 +1,64 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { EmojiPalette } from './components/EmojiPalette'
 import { TilingCanvas } from './components/TilingCanvas'
 import { GroupSelector } from './components/GroupSelector'
 import { CellEditor } from './components/CellEditor'
+import { Toolbar } from './components/Toolbar'
 import { emojiToTwemojiUrl } from './data/emoji'
-import { WALLPAPER_GROUPS } from './wallpaper/groups'
+import { WALLPAPER_GROUPS, getGroup } from './wallpaper/groups'
 import type { WallpaperGroup } from './wallpaper/types'
+import { decodePermalink, encodePermalink } from './utils/permalink'
+import { exportPng } from './utils/export'
 import './App.css'
 
+function getInitialState() {
+  const pl = decodePermalink()
+  return {
+    emoji: pl.emoji ?? '\u{1F600}',
+    group: pl.group ? getGroup(pl.group) : WALLPAPER_GROUPS[0],
+    u: pl.u ?? 0.3,
+    v: pl.v ?? 0.2,
+  }
+}
+
 function App() {
-  const [selectedEmojis, setSelectedEmojis] = useState<string[]>(['\u{1F600}'])
-  const [group, setGroup] = useState<WallpaperGroup>(WALLPAPER_GROUPS[0])
-  const [emojiPos, setEmojiPos] = useState({ u: 0.3, v: 0.2 })
+  const [init] = useState(getInitialState)
+  const [selectedEmojis, setSelectedEmojis] = useState<string[]>([init.emoji])
+  const [group, setGroup] = useState<WallpaperGroup>(init.group)
+  const [emojiPos, setEmojiPos] = useState({ u: init.u, v: init.v })
 
   const activeEmoji = selectedEmojis[0] ?? '\u{1F600}'
   const emojiUrl = emojiToTwemojiUrl(activeEmoji)
 
+  // Update URL on state change
+  useEffect(() => {
+    const url = encodePermalink({
+      emoji: activeEmoji,
+      group: group.name,
+      u: emojiPos.u,
+      v: emojiPos.v,
+    })
+    window.history.replaceState(null, '', url)
+  }, [activeEmoji, group.name, emojiPos.u, emojiPos.v])
+
   const handlePositionChange = useCallback((u: number, v: number) => {
     setEmojiPos({ u, v })
+  }, [])
+
+  const handleExportPng = useCallback(() => {
+    exportPng(group, emojiUrl, 120, emojiPos.u, emojiPos.v)
+  }, [group, emojiUrl, emojiPos])
+
+  const handleCopyLink = useCallback(async () => {
+    const url = new URL(window.location.href)
+    await navigator.clipboard.writeText(url.toString())
   }, [])
 
   return (
     <div className="app">
       <div className="sidebar">
         <h1 className="app-title">Infinite Emoji</h1>
+        <Toolbar onExportPng={handleExportPng} onCopyLink={handleCopyLink} />
         <GroupSelector selected={group} onSelect={setGroup} />
         <CellEditor
           group={group}
