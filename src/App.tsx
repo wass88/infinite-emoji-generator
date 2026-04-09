@@ -5,10 +5,10 @@ import { GroupSelector } from './components/GroupSelector'
 import { CellEditor } from './components/CellEditor'
 import { Toolbar } from './components/Toolbar'
 import { emojiToTwemojiUrl } from './data/emoji'
-import { WALLPAPER_GROUPS, getGroup, isAspectLocked } from './wallpaper/groups'
+import { WALLPAPER_GROUPS, getGroup, isAspectLocked, isSkewAllowed } from './wallpaper/groups'
 import type { WallpaperGroup } from './wallpaper/types'
 import { decodePermalink, encodePermalink } from './utils/permalink'
-import { exportPng } from './utils/export'
+import { exportPng, exportCell } from './utils/export'
 import './App.css'
 
 function getInitialState() {
@@ -21,6 +21,7 @@ function getInitialState() {
     scale: pl.scale ?? 0.4,
     rot: pl.rot ?? 0,
     aspect: pl.aspect ?? 1,
+    skew: pl.skew ?? 0,
   }
 }
 
@@ -32,45 +33,50 @@ function App() {
   const [emojiScale, setEmojiScale] = useState(init.scale)
   const [emojiRotation, setEmojiRotation] = useState(init.rot)
   const [cellAspect, setCellAspect] = useState(init.aspect)
+  const [cellSkew, setCellSkew] = useState(init.skew)
 
   const activeEmoji = selectedEmojis[0] ?? '\u{1F600}'
   const emojiUrl = emojiToTwemojiUrl(activeEmoji)
 
   useEffect(() => {
     const url = encodePermalink({
-      emoji: activeEmoji,
-      group: group.name,
-      u: emojiPos.u,
-      v: emojiPos.v,
-      scale: emojiScale,
-      rot: emojiRotation,
-      aspect: cellAspect,
+      emoji: activeEmoji, group: group.name,
+      u: emojiPos.u, v: emojiPos.v,
+      scale: emojiScale, rot: emojiRotation,
+      aspect: cellAspect, skew: cellSkew,
     })
     window.history.replaceState(null, '', url)
-  }, [activeEmoji, group.name, emojiPos.u, emojiPos.v, emojiScale, emojiRotation, cellAspect])
+  }, [activeEmoji, group.name, emojiPos.u, emojiPos.v, emojiScale, emojiRotation, cellAspect, cellSkew])
 
-  const handlePositionChange = useCallback((u: number, v: number) => {
-    setEmojiPos({ u, v })
+  const handleGroupChange = useCallback((g: WallpaperGroup) => {
+    setGroup(g)
+    if (isAspectLocked(g)) setCellAspect(1)
+    if (!isSkewAllowed(g)) setCellSkew(0)
   }, [])
 
   const handleExportPng = useCallback(() => {
-    exportPng(group, emojiUrl, 120, emojiPos.u, emojiPos.v, emojiScale, emojiRotation, cellAspect)
-  }, [group, emojiUrl, emojiPos, emojiScale, emojiRotation, cellAspect])
+    exportPng(group, emojiUrl, 120, emojiPos.u, emojiPos.v, emojiScale, emojiRotation, cellAspect, cellSkew)
+  }, [group, emojiUrl, emojiPos, emojiScale, emojiRotation, cellAspect, cellSkew])
 
-  const handleCopyLink = useCallback(async () => {
-    const url = new URL(window.location.href)
-    await navigator.clipboard.writeText(url.toString())
+  const handleExportCell = useCallback(() => {
+    exportCell(group, emojiUrl, 120, emojiPos.u, emojiPos.v, emojiScale, emojiRotation, cellAspect, cellSkew)
+  }, [group, emojiUrl, emojiPos, emojiScale, emojiRotation, cellAspect, cellSkew])
+
+  const handleShare = useCallback(async () => {
+    const url = window.location.href
+    if (navigator.share) {
+      await navigator.share({ title: 'Infinite Emoji', url }).catch(() => {})
+    } else {
+      await navigator.clipboard.writeText(url)
+    }
   }, [])
 
   return (
     <div className="app">
       <div className="sidebar">
         <h1 className="app-title">Infinite Emoji</h1>
-        <Toolbar onExportPng={handleExportPng} onCopyLink={handleCopyLink} />
-        <GroupSelector selected={group} onSelect={(g) => {
-          setGroup(g)
-          if (isAspectLocked(g)) setCellAspect(1)
-        }} />
+        <Toolbar onExportPng={handleExportPng} onExportCell={handleExportCell} onShare={handleShare} />
+        <GroupSelector selected={group} onSelect={handleGroupChange} />
         <CellEditor
           group={group}
           emojiUrl={emojiUrl}
@@ -79,10 +85,12 @@ function App() {
           emojiScale={emojiScale}
           emojiRotation={emojiRotation}
           cellAspect={cellAspect}
-          onPositionChange={handlePositionChange}
+          cellSkew={cellSkew}
+          onPositionChange={useCallback((u: number, v: number) => setEmojiPos({ u, v }), [])}
           onScaleChange={setEmojiScale}
           onRotationChange={setEmojiRotation}
           onAspectChange={setCellAspect}
+          onSkewChange={setCellSkew}
         />
         <EmojiPalette
           selectedEmojis={selectedEmojis}
@@ -97,13 +105,11 @@ function App() {
           group={group}
           emojiUrl={emojiUrl}
           cellAspect={cellAspect}
+          cellSkew={cellSkew}
           emojiScale={emojiScale}
           emojiRotation={emojiRotation}
           emojiU={emojiPos.u}
           emojiV={emojiPos.v}
-          onScaleChange={setEmojiScale}
-          onRotationChange={setEmojiRotation}
-          onAspectChange={setCellAspect}
         />
       </div>
     </div>

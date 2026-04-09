@@ -118,13 +118,13 @@ const p4g: WallpaperGroup = {
   latticeA: RECT[0], latticeB: RECT[1],
   ops: [
     I,
-    op(0, -1, 1, 0, 0, 0),    // R90 about origin
-    op(-1, 0, 0, -1, 0, 0),   // R180 about origin
-    op(0, 1, -1, 0, 0, 0),    // R270 about origin
-    op(0, 1, 1, 0, 0, 0),     // mirror y=x
-    op(-1, 0, 0, 1, 0, 0),    // mirror x=0
-    op(0, -1, -1, 0, 0, 0),   // mirror y=-x
-    op(1, 0, 0, -1, 0, 0),    // mirror y=0
+    op(0, -1, 1, 0, 0, 0),          // R90 about origin
+    op(-1, 0, 0, -1, 0, 0),         // R180 about origin
+    op(0, 1, -1, 0, 0, 0),          // R270 about origin
+    op(0, 1, 1, 0, 0.5, 0.5),       // mirror y=x + half-translation
+    op(-1, 0, 0, 1, 0.5, 0.5),      // glide along y-axis
+    op(0, -1, -1, 0, 0.5, 0.5),     // mirror y=-x + half-translation
+    op(1, 0, 0, -1, 0.5, 0.5),      // glide along x-axis
   ],
 };
 
@@ -212,4 +212,10 @@ export function getGroup(name: string): WallpaperGroup {
 const LOCKED = new Set(['p4', 'p4m', 'p4g', 'p3', 'p3m1', 'p31m', 'p6', 'p6m']);
 export function isAspectLocked(group: WallpaperGroup): boolean {
   return LOCKED.has(group.name);
+}
+
+/** Only oblique groups (p1, p2) allow skewing the cell into a parallelogram */
+const SKEW_OK = new Set(['p1', 'p2']);
+export function isSkewAllowed(group: WallpaperGroup): boolean {
+  return SKEW_OK.has(group.name);
 }

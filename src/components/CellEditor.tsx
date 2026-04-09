@@ -1,6 +1,6 @@
 import { useRef, useEffect, useCallback } from 'react';
 import type { WallpaperGroup } from '../wallpaper/types';
-import { isAspectLocked } from '../wallpaper/groups';
+import { isAspectLocked, isSkewAllowed } from '../wallpaper/groups';
 import './CellEditor.css';
 
 interface CellEditorProps {
@@ -11,10 +11,12 @@ interface CellEditorProps {
   emojiScale: number;
   emojiRotation: number;
   cellAspect: number;
+  cellSkew: number;
   onPositionChange: (u: number, v: number) => void;
   onScaleChange: (scale: number) => void;
   onRotationChange: (rot: number) => void;
   onAspectChange: (aspect: number) => void;
+  onSkewChange: (skew: number) => void;
 }
 
 const SIZE = 280;
@@ -23,23 +25,24 @@ const HANDLE_R = 5;
 const HANDLE_HIT = 12;
 const STEM_LEN = 22;
 
-type DragMode = 'none' | 'move' | 'resize' | 'rotate' | 'aspect';
+type DragMode = 'none' | 'move' | 'resize' | 'rotate' | 'aspect' | 'skew';
 
 export function CellEditor({
-  group, emojiUrl, emojiU, emojiV, emojiScale, emojiRotation, cellAspect,
-  onPositionChange, onScaleChange, onRotationChange, onAspectChange,
+  group, emojiUrl, emojiU, emojiV, emojiScale, emojiRotation, cellAspect, cellSkew,
+  onPositionChange, onScaleChange, onRotationChange, onAspectChange, onSkewChange,
 }: CellEditorProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
   const modeRef = useRef<DragMode>('none');
-  const aspectDragRef = useRef<{ startX: number; initAspect: number } | null>(null);
-  const locked = isAspectLocked(group);
+  const dragStartRef = useRef<{ x: number; init: number }>({ x: 0, init: 0 });
+  const aspectOk = !isAspectLocked(group);
+  const skewOk = isSkewAllowed(group);
 
   const toWorld = useCallback((u: number, v: number): [number, number] => {
     const [ax, ay] = group.latticeA;
     const [bx, by] = group.latticeB;
-    return [u * ax * cellAspect + v * bx, u * ay * cellAspect + v * by];
-  }, [group, cellAspect]);
+    return [u * ax * cellAspect + v * (bx + cellSkew), u * ay * cellAspect + v * by];
+  }, [group, cellAspect, cellSkew]);
 
   const getTransform = useCallback(() => {
     const corners = [[0, 0], [1, 0], [1, 1], [0, 1]].map(([u, v]) => toWorld(u, v));
@@ -69,16 +72,16 @@ export function CellEditor({
     const [ax, ay] = group.latticeA;
     const [bx, by] = group.latticeB;
     const aax = ax * cellAspect, aay = ay * cellAspect;
-    const det = aax * by - bx * aay;
-    return [(wx * by - wy * bx) / det, (wy * aax - wx * aay) / det];
-  }, [group, cellAspect, getTransform]);
+    const bbx = bx + cellSkew;
+    const det = aax * by - bbx * aay;
+    return [(wx * by - wy * bbx) / det, (wy * aax - wx * aay) / det];
+  }, [group, cellAspect, cellSkew, getTransform]);
 
   const emojiPx = useCallback(() => emojiScale * getTransform().scale, [emojiScale, getTransform]);
-
   const emojiCenter = useCallback((): [number, number] =>
     toCanvas(...toWorld(emojiU, emojiV)), [toCanvas, toWorld, emojiU, emojiV]);
 
-  /** Emoji resize corner handles (rotated with emoji) */
+  /** Emoji resize corner handles (rotated) */
   const emojiHandles = useCallback((): [number, number][] => {
     const [cx, cy] = emojiCenter();
     const half = emojiPx() / 2;
@@ -89,30 +92,26 @@ export function CellEditor({
     });
   }, [emojiCenter, emojiPx, emojiRotation]);
 
-  /** Rotation stem handle position */
-  const stemHandle = useCallback((): [number, number] => {
-    const [cx, cy] = emojiCenter();
-    const dist = emojiPx() / 2 + STEM_LEN;
-    return [cx + Math.sin(emojiRotation) * (-dist), cy + Math.cos(emojiRotation) * (dist)];
-    // "up" in screen coords is -y, but canvas y grows downward
-  }, [emojiCenter, emojiPx, emojiRotation]);
-
-  /** Stem base (top center of rotated emoji) */
-  const stemBase = useCallback((): [number, number] => {
+  /** Rotation stem handle: extends "up" from emoji top in screen coords */
+  const stemPositions = useCallback((): { base: [number, number]; tip: [number, number] } => {
     const [cx, cy] = emojiCenter();
     const half = emojiPx() / 2;
-    return [cx - Math.sin(emojiRotation) * half, cy - Math.cos(emojiRotation) * (-half)];
+    // "Up" direction rotated by emojiRotation. In screen coords, up = -y.
+    const dx = Math.sin(emojiRotation);
+    const dy = -Math.cos(emojiRotation);
+    return {
+      base: [cx + dx * half, cy + dy * half],
+      tip: [cx + dx * (half + STEM_LEN), cy + dy * (half + STEM_LEN)],
+    };
   }, [emojiCenter, emojiPx, emojiRotation]);
 
-  /** Cell corner handles for aspect */
-  const cellCornerHandles = useCallback((): [number, number][] => {
-    if (locked) return [];
-    return [
-      toCanvas(...toWorld(1, 0)),
-      toCanvas(...toWorld(1, 1)),
-      toCanvas(...toWorld(0, 1)),
-    ];
-  }, [locked, toCanvas, toWorld]);
+  /** Cell corner handles: (1,0) for aspect, (0,1) for skew */
+  const cellHandles = useCallback((): { pos: [number, number]; kind: 'aspect' | 'skew' }[] => {
+    const result: { pos: [number, number]; kind: 'aspect' | 'skew' }[] = [];
+    if (aspectOk) result.push({ pos: toCanvas(...toWorld(1, 0)), kind: 'aspect' });
+    if (skewOk) result.push({ pos: toCanvas(...toWorld(0, 1)), kind: 'skew' });
+    return result;
+  }, [aspectOk, skewOk, toCanvas, toWorld]);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -151,8 +150,8 @@ export function CellEditor({
       ctx.beginPath(); ctx.moveTo(b0x, b0y); ctx.lineTo(b1x, b1y); ctx.stroke();
     }
 
-    // Cell corner aspect handles (orange)
-    for (const [hx, hy] of cellCornerHandles()) {
+    // Cell corner handles (orange)
+    for (const { pos: [hx, hy] } of cellHandles()) {
       ctx.beginPath();
       ctx.arc(hx, hy, HANDLE_R + 1, 0, Math.PI * 2);
       ctx.fillStyle = '#fff';
@@ -185,7 +184,7 @@ export function CellEditor({
     ctx.setLineDash([]);
     ctx.restore();
 
-    // Resize corner handles (blue)
+    // Resize handles (blue)
     for (const [hx, hy] of emojiHandles()) {
       ctx.beginPath();
       ctx.arc(hx, hy, HANDLE_R, 0, Math.PI * 2);
@@ -196,17 +195,16 @@ export function CellEditor({
       ctx.stroke();
     }
 
-    // Rotation stem + handle (green)
-    const [bx, by] = stemBase();
-    const [shx, shy] = stemHandle();
+    // Rotation stem (green)
+    const { base, tip } = stemPositions();
     ctx.beginPath();
-    ctx.moveTo(bx, by);
-    ctx.lineTo(shx, shy);
+    ctx.moveTo(base[0], base[1]);
+    ctx.lineTo(tip[0], tip[1]);
     ctx.strokeStyle = '#16a34a';
     ctx.lineWidth = 1.5;
     ctx.stroke();
     ctx.beginPath();
-    ctx.arc(shx, shy, HANDLE_R, 0, Math.PI * 2);
+    ctx.arc(tip[0], tip[1], HANDLE_R, 0, Math.PI * 2);
     ctx.fillStyle = '#fff';
     ctx.strokeStyle = '#16a34a';
     ctx.lineWidth = 2;
@@ -218,8 +216,8 @@ export function CellEditor({
     ctx.font = '10px monospace';
     const deg = ((emojiRotation * 180 / Math.PI) % 360 + 360) % 360;
     ctx.fillText(`${deg.toFixed(0)}\u00b0  ${(emojiScale * 100).toFixed(0)}%`, 4, SIZE - 4);
-  }, [emojiU, emojiV, emojiScale, emojiRotation, cellAspect, locked,
-    toCanvas, toWorld, emojiPx, emojiCenter, emojiHandles, stemBase, stemHandle, cellCornerHandles]);
+  }, [emojiU, emojiV, emojiScale, emojiRotation, cellAspect, cellSkew,
+    toCanvas, toWorld, emojiPx, emojiCenter, emojiHandles, stemPositions, cellHandles]);
 
   useEffect(() => {
     const img = new Image();
@@ -231,78 +229,64 @@ export function CellEditor({
 
   useEffect(() => { draw(); }, [draw]);
 
-  const hitEmoji = useCallback((cx: number, cy: number): boolean =>
-    emojiHandles().some(([hx, hy]) => Math.abs(cx - hx) < HANDLE_HIT && Math.abs(cy - hy) < HANDLE_HIT),
-  [emojiHandles]);
-
-  const hitStem = useCallback((cx: number, cy: number): boolean => {
-    const [hx, hy] = stemHandle();
-    return Math.abs(cx - hx) < HANDLE_HIT && Math.abs(cy - hy) < HANDLE_HIT;
-  }, [stemHandle]);
-
-  const hitCell = useCallback((cx: number, cy: number): boolean =>
-    cellCornerHandles().some(([hx, hy]) => Math.abs(cx - hx) < HANDLE_HIT && Math.abs(cy - hy) < HANDLE_HIT),
-  [cellCornerHandles]);
+  const hitTest = useCallback((cx: number, cy: number): DragMode => {
+    const { tip } = stemPositions();
+    if (Math.abs(cx - tip[0]) < HANDLE_HIT && Math.abs(cy - tip[1]) < HANDLE_HIT) return 'rotate';
+    if (emojiHandles().some(([hx, hy]) => Math.abs(cx - hx) < HANDLE_HIT && Math.abs(cy - hy) < HANDLE_HIT)) return 'resize';
+    for (const { pos: [hx, hy], kind } of cellHandles()) {
+      if (Math.abs(cx - hx) < HANDLE_HIT && Math.abs(cy - hy) < HANDLE_HIT) return kind;
+    }
+    return 'move';
+  }, [stemPositions, emojiHandles, cellHandles]);
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     canvasRef.current?.setPointerCapture(e.pointerId);
     const rect = canvasRef.current!.getBoundingClientRect();
-    const cx = e.clientX - rect.left;
-    const cy = e.clientY - rect.top;
-
-    if (hitStem(cx, cy)) {
-      modeRef.current = 'rotate';
-    } else if (hitEmoji(cx, cy)) {
-      modeRef.current = 'resize';
-    } else if (hitCell(cx, cy)) {
-      modeRef.current = 'aspect';
-      aspectDragRef.current = { startX: e.clientX, initAspect: cellAspect };
-    } else {
-      modeRef.current = 'move';
-    }
-  }, [hitStem, hitEmoji, hitCell, cellAspect]);
+    const mode = hitTest(e.clientX - rect.left, e.clientY - rect.top);
+    modeRef.current = mode;
+    if (mode === 'aspect') dragStartRef.current = { x: e.clientX, init: cellAspect };
+    if (mode === 'skew') dragStartRef.current = { x: e.clientX, init: cellSkew };
+  }, [hitTest, cellAspect, cellSkew]);
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
-    if (modeRef.current === 'none') return;
+    const mode = modeRef.current;
+    if (mode === 'none') return;
     const rect = canvasRef.current!.getBoundingClientRect();
     const cx = e.clientX - rect.left;
     const cy = e.clientY - rect.top;
 
-    if (modeRef.current === 'move') {
+    if (mode === 'move') {
       let [u, v] = toLattice(cx, cy);
       u = Math.max(0, Math.min(1, u));
       v = Math.max(0, Math.min(1, v));
       onPositionChange(u, v);
-    } else if (modeRef.current === 'resize') {
+    } else if (mode === 'resize') {
       const [ecx, ecy] = emojiCenter();
       const dist = Math.max(Math.abs(cx - ecx), Math.abs(cy - ecy));
       onScaleChange(Math.max(0.08, Math.min(1.2, (dist * 2) / getTransform().scale)));
-    } else if (modeRef.current === 'rotate') {
+    } else if (mode === 'rotate') {
       const [ecx, ecy] = emojiCenter();
       onRotationChange(Math.atan2(cx - ecx, -(cy - ecy)));
-    } else if (modeRef.current === 'aspect' && aspectDragRef.current) {
-      const d = aspectDragRef.current;
-      const delta = (e.clientX - d.startX) / 100;
-      onAspectChange(Math.max(0.25, Math.min(4, d.initAspect + delta)));
+    } else if (mode === 'aspect') {
+      const d = dragStartRef.current;
+      onAspectChange(Math.max(0.25, Math.min(4, d.init + (e.clientX - d.x) / 100)));
+    } else if (mode === 'skew') {
+      const d = dragStartRef.current;
+      onSkewChange(Math.max(-2, Math.min(2, d.init + (e.clientX - d.x) / 100)));
     }
-  }, [toLattice, emojiCenter, getTransform, onPositionChange, onScaleChange, onRotationChange, onAspectChange]);
+  }, [toLattice, emojiCenter, getTransform, onPositionChange, onScaleChange, onRotationChange, onAspectChange, onSkewChange]);
 
-  const handlePointerUp = useCallback(() => {
-    modeRef.current = 'none';
-    aspectDragRef.current = null;
-  }, []);
+  const handlePointerUp = useCallback(() => { modeRef.current = 'none'; }, []);
 
   const handlePointerHover = useCallback((e: React.PointerEvent) => {
     if (modeRef.current !== 'none') return;
     const rect = canvasRef.current!.getBoundingClientRect();
-    const cx = e.clientX - rect.left;
-    const cy = e.clientY - rect.top;
-    const canvas = canvasRef.current!;
-    if (hitStem(cx, cy)) canvas.style.cursor = 'grab';
-    else if (hitEmoji(cx, cy)) canvas.style.cursor = 'nwse-resize';
-    else if (hitCell(cx, cy)) canvas.style.cursor = 'ew-resize';
-    else canvas.style.cursor = 'crosshair';
-  }, [hitStem, hitEmoji, hitCell]);
+    const mode = hitTest(e.clientX - rect.left, e.clientY - rect.top);
+    const cursors: Record<string, string> = {
+      rotate: 'grab', resize: 'nwse-resize', aspect: 'ew-resize', skew: 'ew-resize', move: 'crosshair',
+    };
+    canvasRef.current!.style.cursor = cursors[mode] ?? 'crosshair';
+  }, [hitTest]);
 
   return (
     <div className="cell-editor">

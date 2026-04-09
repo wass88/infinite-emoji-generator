@@ -30,6 +30,7 @@ export interface RenderParams {
   emojiImg: HTMLImageElement;
   cellSize: number;
   cellAspect: number;
+  cellSkew: number;
   emojiSize: number;
   emojiRotation: number;
   viewportWidth: number;
@@ -50,16 +51,16 @@ export interface FocusEmoji {
 
 export function renderTiling(ctx: CanvasRenderingContext2D, params: RenderParams): FocusEmoji | null {
   const {
-    group, emojiImg, cellSize, cellAspect, emojiSize, emojiRotation,
+    group, emojiImg, cellSize, cellAspect, cellSkew, emojiSize, emojiRotation,
     viewportWidth, viewportHeight,
     offsetX, offsetY, emojiU, emojiV,
   } = params;
 
   const [ax, ay] = group.latticeA;
   const [bx, by] = group.latticeB;
-  // Scaled lattice vectors (aspect stretches the A direction)
+  // Scaled lattice vectors (aspect stretches A, skew tilts B)
   const sax = ax * cellSize * cellAspect, say = ay * cellSize * cellAspect;
-  const sbx = bx * cellSize, sby = by * cellSize;
+  const sbx = (bx + cellSkew) * cellSize, sby = by * cellSize;
 
   // Precompute world matrices for all ops
   const worldMatrices = group.ops.map(op => toWorldMatrix(group, op));
