@@ -1,8 +1,8 @@
 .emoji-palette {
   display: flex;
   flex-direction: column;
-  width: 380px;
-  max-height: 520px;
+  width: 100%;
+  max-height: 400px;
   border: 1px solid #ddd;
   border-radius: 12px;
   background: #fff;

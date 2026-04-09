@@ -1,0 +1,13 @@
+.cell-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cell-editor-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
