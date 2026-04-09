@@ -1,0 +1,28 @@
+.app {
+  display: flex;
+  height: 100dvh;
+  font-family: system-ui, sans-serif;
+}
+
+.sidebar {
+  width: 320px;
+  min-width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border-right: 1px solid #e0e0e0;
+  overflow-y: auto;
+  background: #fafafa;
+}
+
+.app-title {
+  margin: 0;
+  font-size: 18px;
+}
+
+.canvas-area {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+}

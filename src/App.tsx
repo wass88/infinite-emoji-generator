@@ -1,48 +1,32 @@
 import { useState } from 'react'
 import { EmojiPalette } from './components/EmojiPalette'
+import { TilingCanvas } from './components/TilingCanvas'
+import { GroupSelector } from './components/GroupSelector'
 import { emojiToTwemojiUrl } from './data/emoji'
+import { WALLPAPER_GROUPS } from './wallpaper/groups'
+import type { WallpaperGroup } from './wallpaper/types'
+import './App.css'
 
 function App() {
-  const [selectedEmojis, setSelectedEmojis] = useState<string[]>([])
+  const [selectedEmojis, setSelectedEmojis] = useState<string[]>(['\u{1F600}'])
+  const [group, setGroup] = useState<WallpaperGroup>(WALLPAPER_GROUPS[0])
+
+  const activeEmoji = selectedEmojis[0] ?? '\u{1F600}'
+  const emojiUrl = emojiToTwemojiUrl(activeEmoji)
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        padding: '24px',
-        fontFamily: 'system-ui, sans-serif',
-        minHeight: '100dvh',
-      }}
-    >
-      <h1 style={{ margin: '0 0 8px' }}>infinite-emoji-generator</h1>
-      <p style={{ color: '#888', margin: '0 0 24px' }}>
-        壁紙群の対称性で絵文字をタイリングする Web アプリ
-      </p>
-
-      <EmojiPalette
-        selectedEmojis={selectedEmojis}
-        onSelectionChange={setSelectedEmojis}
-      />
-
-      {selectedEmojis.length > 0 && (
-        <div style={{ marginTop: 16, textAlign: 'center' }}>
-          <p style={{ color: '#666', fontSize: 14 }}>
-            選択中: {selectedEmojis.length} 個
-          </p>
-          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', justifyContent: 'center' }}>
-            {selectedEmojis.map((emoji) => (
-              <img
-                key={emoji}
-                src={emojiToTwemojiUrl(emoji)}
-                alt={emoji}
-                style={{ width: 32, height: 32 }}
-              />
-            ))}
-          </div>
-        </div>
-      )}
+    <div className="app">
+      <div className="sidebar">
+        <h1 className="app-title">Infinite Emoji</h1>
+        <GroupSelector selected={group} onSelect={setGroup} />
+        <EmojiPalette
+          selectedEmojis={selectedEmojis}
+          onSelectionChange={setSelectedEmojis}
+        />
+      </div>
+      <div className="canvas-area">
+        <TilingCanvas group={group} emojiUrl={emojiUrl} />
+      </div>
     </div>
   )
 }

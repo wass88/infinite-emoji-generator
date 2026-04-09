@@ -1,0 +1,41 @@
+.group-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.group-selector-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.group-selector-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.group-btn {
+  padding: 4px 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: #fff;
+  font-size: 12px;
+  font-family: monospace;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.group-btn:hover {
+  background: #f0f0f0;
+  border-color: #aaa;
+}
+
+.group-btn.active {
+  background: #2563eb;
+  color: #fff;
+  border-color: #2563eb;
+}
