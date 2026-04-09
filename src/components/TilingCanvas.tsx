@@ -2,6 +2,7 @@ import { useRef, useEffect, useCallback } from 'react';
 import { renderTiling } from '../wallpaper/renderer';
 import type { FocusEmoji } from '../wallpaper/renderer';
 import type { WallpaperGroup } from '../wallpaper/types';
+import { isAspectLocked } from '../wallpaper/groups';
 
 const HANDLE_R = 6;
 const HANDLE_HIT = 14;
@@ -10,22 +11,26 @@ interface TilingCanvasProps {
   group: WallpaperGroup;
   emojiUrl: string;
   cellSize?: number;
+  cellAspect?: number;
   emojiScale?: number;
   emojiU?: number;
   emojiV?: number;
   onScaleChange?: (scale: number) => void;
+  onAspectChange?: (aspect: number) => void;
 }
 
-type DragMode = 'none' | 'pan' | 'resize';
+type DragMode = 'none' | 'pan' | 'resize' | 'aspect';
 
 export function TilingCanvas({
   group,
   emojiUrl,
   cellSize = 120,
+  cellAspect = 1,
   emojiScale = 0.4,
   emojiU = 0.3,
   emojiV = 0.2,
   onScaleChange,
+  onAspectChange,
 }: TilingCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const offsetRef = useRef({ x: 0, y: 0 });
@@ -34,11 +39,32 @@ export function TilingCanvas({
   const rafRef = useRef(0);
   const modeRef = useRef<DragMode>('none');
   const focusRef = useRef<FocusEmoji | null>(null);
+  const aspectDragRef = useRef<{ startX: number; startY: number; initAspect: number } | null>(null);
 
   const emojiSize = cellSize * emojiScale;
+  const aspectLocked = isAspectLocked(group);
 
-  /** Return 4 corner handle positions for the focus emoji */
-  const focusHandles = useCallback((): [number, number][] | null => {
+  // Scaled lattice vectors (same formula as renderer)
+  const scaledLattice = useCallback(() => {
+    const [ax, ay] = group.latticeA;
+    const [bx, by] = group.latticeB;
+    return {
+      sax: ax * cellSize * cellAspect, say: ay * cellSize * cellAspect,
+      sbx: bx * cellSize, sby: by * cellSize,
+    };
+  }, [group, cellSize, cellAspect]);
+
+  /** Cell corner in canvas coords */
+  const cellCorner = useCallback((i: number, j: number): [number, number] => {
+    const { sax, say, sbx, sby } = scaledLattice();
+    return [
+      i * sax + j * sbx - offsetRef.current.x,
+      i * say + j * sby - offsetRef.current.y,
+    ];
+  }, [scaledLattice]);
+
+  /** 4 emoji-resize handles */
+  const emojiHandles = useCallback((): [number, number][] | null => {
     const f = focusRef.current;
     if (!f) return null;
     const half = emojiSize / 2;
@@ -50,30 +76,78 @@ export function TilingCanvas({
     ];
   }, [emojiSize]);
 
-  const drawHandles = useCallback((ctx: CanvasRenderingContext2D) => {
-    const handles = focusHandles();
-    if (!handles) return;
-    const f = focusRef.current!;
-    const half = emojiSize / 2;
+  /** Cell-aspect handle: right edge midpoint of focus cell */
+  const aspectHandle = useCallback((): [number, number] | null => {
+    const f = focusRef.current;
+    if (!f || aspectLocked) return null;
+    const { sax, say, sbx, sby } = scaledLattice();
+    return [
+      (f.cellI + 1) * sax + (f.cellJ + 0.5) * sbx - offsetRef.current.x,
+      (f.cellI + 1) * say + (f.cellJ + 0.5) * sby - offsetRef.current.y,
+    ];
+  }, [aspectLocked, scaledLattice]);
 
-    // Dashed bounding box
-    ctx.strokeStyle = 'rgba(37,99,235,0.6)';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([4, 4]);
-    ctx.strokeRect(f.cx - half, f.cy - half, emojiSize, emojiSize);
-    ctx.setLineDash([]);
+  const drawOverlay = useCallback((ctx: CanvasRenderingContext2D) => {
+    const f = focusRef.current;
+    if (!f) return;
 
-    // Corner circles
-    for (const [hx, hy] of handles) {
-      ctx.beginPath();
-      ctx.arc(hx, hy, HANDLE_R, 0, Math.PI * 2);
-      ctx.fillStyle = '#fff';
-      ctx.fill();
-      ctx.strokeStyle = '#2563eb';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
+    // --- Emoji resize handles ---
+    if (onScaleChange) {
+      const half = emojiSize / 2;
+      ctx.strokeStyle = 'rgba(37,99,235,0.6)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.strokeRect(f.cx - half, f.cy - half, emojiSize, emojiSize);
+      ctx.setLineDash([]);
+
+      const eHandles = emojiHandles();
+      if (eHandles) {
+        for (const [hx, hy] of eHandles) {
+          ctx.beginPath();
+          ctx.arc(hx, hy, HANDLE_R, 0, Math.PI * 2);
+          ctx.fillStyle = '#fff';
+          ctx.fill();
+          ctx.strokeStyle = '#2563eb';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        }
+      }
     }
-  }, [focusHandles, emojiSize]);
+
+    // --- Cell outline + aspect handle ---
+    if (!aspectLocked && onAspectChange) {
+      const corners = [
+        cellCorner(f.cellI, f.cellJ),
+        cellCorner(f.cellI + 1, f.cellJ),
+        cellCorner(f.cellI + 1, f.cellJ + 1),
+        cellCorner(f.cellI, f.cellJ + 1),
+      ];
+      ctx.beginPath();
+      ctx.moveTo(corners[0][0], corners[0][1]);
+      for (let k = 1; k < 4; k++) ctx.lineTo(corners[k][0], corners[k][1]);
+      ctx.closePath();
+      ctx.strokeStyle = 'rgba(234,88,12,0.4)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([6, 4]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      const ah = aspectHandle();
+      if (ah) {
+        ctx.beginPath();
+        ctx.arc(ah[0], ah[1], HANDLE_R + 1, 0, Math.PI * 2);
+        ctx.fillStyle = '#fff';
+        ctx.fill();
+        ctx.strokeStyle = '#ea580c';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        // Arrow hint
+        ctx.fillStyle = '#ea580c';
+        ctx.font = '10px sans-serif';
+        ctx.fillText('\u2194', ah[0] - 5, ah[1] + 3);
+      }
+    }
+  }, [emojiSize, emojiHandles, aspectHandle, aspectLocked, cellCorner, onScaleChange, onAspectChange]);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -99,6 +173,7 @@ export function TilingCanvas({
       group,
       emojiImg: img,
       cellSize,
+      cellAspect,
       emojiSize,
       viewportWidth: w,
       viewportHeight: h,
@@ -109,10 +184,9 @@ export function TilingCanvas({
     });
 
     focusRef.current = focus;
-    if (onScaleChange) drawHandles(ctx);
-  }, [group, cellSize, emojiScale, emojiU, emojiV, emojiSize, drawHandles, onScaleChange]);
+    drawOverlay(ctx);
+  }, [group, cellSize, cellAspect, emojiScale, emojiU, emojiV, emojiSize, drawOverlay]);
 
-  // Load emoji image
   useEffect(() => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
@@ -129,13 +203,18 @@ export function TilingCanvas({
     return () => window.removeEventListener('resize', onResize);
   }, [draw]);
 
-  const hitHandle = useCallback((cx: number, cy: number): boolean => {
-    const handles = focusHandles();
+  const hitEmoji = useCallback((cx: number, cy: number): boolean => {
+    const handles = emojiHandles();
     if (!handles) return false;
     return handles.some(([hx, hy]) =>
-      Math.abs(cx - hx) < HANDLE_HIT && Math.abs(cy - hy) < HANDLE_HIT,
-    );
-  }, [focusHandles]);
+      Math.abs(cx - hx) < HANDLE_HIT && Math.abs(cy - hy) < HANDLE_HIT);
+  }, [emojiHandles]);
+
+  const hitAspect = useCallback((cx: number, cy: number): boolean => {
+    const ah = aspectHandle();
+    if (!ah) return false;
+    return Math.abs(cx - ah[0]) < HANDLE_HIT && Math.abs(cy - ah[1]) < HANDLE_HIT;
+  }, [aspectHandle]);
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     const canvas = canvasRef.current;
@@ -146,18 +225,19 @@ export function TilingCanvas({
     const cx = e.clientX - rect.left;
     const cy = e.clientY - rect.top;
 
-    if (onScaleChange && hitHandle(cx, cy)) {
+    if (onScaleChange && hitEmoji(cx, cy)) {
       modeRef.current = 'resize';
+    } else if (onAspectChange && hitAspect(cx, cy)) {
+      modeRef.current = 'aspect';
+      aspectDragRef.current = { startX: e.clientX, startY: e.clientY, initAspect: cellAspect };
     } else {
       modeRef.current = 'pan';
       panRef.current = {
-        startX: e.clientX,
-        startY: e.clientY,
-        origX: offsetRef.current.x,
-        origY: offsetRef.current.y,
+        startX: e.clientX, startY: e.clientY,
+        origX: offsetRef.current.x, origY: offsetRef.current.y,
       };
     }
-  }, [onScaleChange, hitHandle]);
+  }, [onScaleChange, onAspectChange, hitEmoji, hitAspect, cellAspect]);
 
   const onPointerMove = useCallback((e: React.PointerEvent) => {
     const canvas = canvasRef.current;
@@ -168,8 +248,9 @@ export function TilingCanvas({
     const cy = e.clientY - rect.top;
 
     if (modeRef.current === 'none') {
-      // Hover cursor
-      canvas.style.cursor = (onScaleChange && hitHandle(cx, cy)) ? 'nwse-resize' : 'grab';
+      if (onScaleChange && hitEmoji(cx, cy)) canvas.style.cursor = 'nwse-resize';
+      else if (onAspectChange && hitAspect(cx, cy)) canvas.style.cursor = 'ew-resize';
+      else canvas.style.cursor = 'grab';
       return;
     }
 
@@ -185,14 +266,20 @@ export function TilingCanvas({
     if (modeRef.current === 'resize' && onScaleChange && focusRef.current) {
       const f = focusRef.current;
       const dist = Math.max(Math.abs(cx - f.cx), Math.abs(cy - f.cy));
-      const newScale = (dist * 2) / cellSize;
-      onScaleChange(Math.max(0.08, Math.min(1.5, newScale)));
+      onScaleChange(Math.max(0.08, Math.min(1.5, (dist * 2) / cellSize)));
     }
-  }, [draw, onScaleChange, hitHandle, cellSize]);
+
+    if (modeRef.current === 'aspect' && onAspectChange && aspectDragRef.current) {
+      const d = aspectDragRef.current;
+      const delta = (e.clientX - d.startX) / 150;
+      onAspectChange(Math.max(0.25, Math.min(4, d.initAspect + delta)));
+    }
+  }, [draw, onScaleChange, onAspectChange, hitEmoji, hitAspect, cellSize]);
 
   const onPointerUp = useCallback(() => {
     modeRef.current = 'none';
     panRef.current = null;
+    aspectDragRef.current = null;
   }, []);
 
   return (

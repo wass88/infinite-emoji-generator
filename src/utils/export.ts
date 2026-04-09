@@ -8,6 +8,7 @@ export function exportPng(
   emojiU: number,
   emojiV: number,
   emojiScale = 0.4,
+  cellAspect = 1,
   width = 1920,
   height = 1080,
 ): void {
@@ -23,6 +24,7 @@ export function exportPng(
       group,
       emojiImg: img,
       cellSize,
+      cellAspect,
       emojiSize: cellSize * emojiScale,
       viewportWidth: width,
       viewportHeight: height,

@@ -19,6 +19,7 @@ function getInitialState() {
     u: pl.u ?? 0.3,
     v: pl.v ?? 0.2,
     scale: pl.scale ?? 0.4,
+    aspect: pl.aspect ?? 1,
   }
 }
 
@@ -28,6 +29,7 @@ function App() {
   const [group, setGroup] = useState<WallpaperGroup>(init.group)
   const [emojiPos, setEmojiPos] = useState({ u: init.u, v: init.v })
   const [emojiScale, setEmojiScale] = useState(init.scale)
+  const [cellAspect, setCellAspect] = useState(init.aspect)
 
   const activeEmoji = selectedEmojis[0] ?? '\u{1F600}'
   const emojiUrl = emojiToTwemojiUrl(activeEmoji)
@@ -40,17 +42,18 @@ function App() {
       u: emojiPos.u,
       v: emojiPos.v,
       scale: emojiScale,
+      aspect: cellAspect,
     })
     window.history.replaceState(null, '', url)
-  }, [activeEmoji, group.name, emojiPos.u, emojiPos.v, emojiScale])
+  }, [activeEmoji, group.name, emojiPos.u, emojiPos.v, emojiScale, cellAspect])
 
   const handlePositionChange = useCallback((u: number, v: number) => {
     setEmojiPos({ u, v })
   }, [])
 
   const handleExportPng = useCallback(() => {
-    exportPng(group, emojiUrl, 120, emojiPos.u, emojiPos.v, emojiScale)
-  }, [group, emojiUrl, emojiPos, emojiScale])
+    exportPng(group, emojiUrl, 120, emojiPos.u, emojiPos.v, emojiScale, cellAspect)
+  }, [group, emojiUrl, emojiPos, emojiScale, cellAspect])
 
   const handleCopyLink = useCallback(async () => {
     const url = new URL(window.location.href)
@@ -69,8 +72,10 @@ function App() {
           emojiU={emojiPos.u}
           emojiV={emojiPos.v}
           emojiScale={emojiScale}
+          cellAspect={cellAspect}
           onPositionChange={handlePositionChange}
           onScaleChange={setEmojiScale}
+          onAspectChange={setCellAspect}
         />
         <EmojiPalette
           selectedEmojis={selectedEmojis}
@@ -81,10 +86,12 @@ function App() {
         <TilingCanvas
           group={group}
           emojiUrl={emojiUrl}
+          cellAspect={cellAspect}
           emojiScale={emojiScale}
           emojiU={emojiPos.u}
           emojiV={emojiPos.v}
           onScaleChange={setEmojiScale}
+          onAspectChange={setCellAspect}
         />
       </div>
     </div>

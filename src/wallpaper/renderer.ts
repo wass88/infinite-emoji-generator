@@ -29,6 +29,7 @@ export interface RenderParams {
   group: WallpaperGroup;
   emojiImg: HTMLImageElement;
   cellSize: number;
+  cellAspect: number;
   emojiSize: number;
   viewportWidth: number;
   viewportHeight: number;
@@ -38,23 +39,25 @@ export interface RenderParams {
   emojiV: number;
 }
 
-/** Canvas position of a rendered emoji (closest to viewport center) */
+/** Info about the emoji closest to viewport center */
 export interface FocusEmoji {
   cx: number;
   cy: number;
+  cellI: number;
+  cellJ: number;
 }
 
 export function renderTiling(ctx: CanvasRenderingContext2D, params: RenderParams): FocusEmoji | null {
   const {
-    group, emojiImg, cellSize, emojiSize,
+    group, emojiImg, cellSize, cellAspect, emojiSize,
     viewportWidth, viewportHeight,
     offsetX, offsetY, emojiU, emojiV,
   } = params;
 
   const [ax, ay] = group.latticeA;
   const [bx, by] = group.latticeB;
-  // Scaled lattice vectors
-  const sax = ax * cellSize, say = ay * cellSize;
+  // Scaled lattice vectors (aspect stretches the A direction)
+  const sax = ax * cellSize * cellAspect, say = ay * cellSize * cellAspect;
   const sbx = bx * cellSize, sby = by * cellSize;
 
   // Precompute world matrices for all ops
@@ -132,7 +135,7 @@ export function renderTiling(ctx: CanvasRenderingContext2D, params: RenderParams
         const d = dx * dx + dy * dy;
         if (d < bestDist) {
           bestDist = d;
-          focus = { cx, cy };
+          focus = { cx, cy, cellI: i, cellJ: j };
         }
       }
     }

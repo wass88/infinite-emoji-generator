@@ -207,3 +207,9 @@ export const WALLPAPER_GROUPS: WallpaperGroup[] = [
 export function getGroup(name: string): WallpaperGroup {
   return WALLPAPER_GROUPS.find(g => g.name === name) ?? p1;
 }
+
+/** Square and hexagonal groups have fixed aspect ratio */
+const LOCKED = new Set(['p4', 'p4m', 'p4g', 'p3', 'p3m1', 'p31m', 'p6', 'p6m']);
+export function isAspectLocked(group: WallpaperGroup): boolean {
+  return LOCKED.has(group.name);
+}
