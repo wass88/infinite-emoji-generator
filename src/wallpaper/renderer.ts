@@ -31,6 +31,7 @@ export interface RenderParams {
   cellSize: number;
   cellAspect: number;
   emojiSize: number;
+  emojiRotation: number;
   viewportWidth: number;
   viewportHeight: number;
   offsetX: number;
@@ -49,7 +50,7 @@ export interface FocusEmoji {
 
 export function renderTiling(ctx: CanvasRenderingContext2D, params: RenderParams): FocusEmoji | null {
   const {
-    group, emojiImg, cellSize, cellAspect, emojiSize,
+    group, emojiImg, cellSize, cellAspect, emojiSize, emojiRotation,
     viewportWidth, viewportHeight,
     offsetX, offsetY, emojiU, emojiV,
   } = params;
@@ -127,6 +128,7 @@ export function renderTiling(ctx: CanvasRenderingContext2D, params: RenderParams
         ctx.save();
         ctx.translate(cx, cy);
         ctx.transform(m.a, m.c, m.b, m.d, 0, 0);
+        if (emojiRotation) ctx.rotate(emojiRotation);
         ctx.drawImage(emojiImg, -halfEmoji, -halfEmoji, emojiSize, emojiSize);
         ctx.restore();
 

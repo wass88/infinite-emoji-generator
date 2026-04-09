@@ -19,6 +19,7 @@ function getInitialState() {
     u: pl.u ?? 0.3,
     v: pl.v ?? 0.2,
     scale: pl.scale ?? 0.4,
+    rot: pl.rot ?? 0,
     aspect: pl.aspect ?? 1,
   }
 }
@@ -29,12 +30,12 @@ function App() {
   const [group, setGroup] = useState<WallpaperGroup>(init.group)
   const [emojiPos, setEmojiPos] = useState({ u: init.u, v: init.v })
   const [emojiScale, setEmojiScale] = useState(init.scale)
+  const [emojiRotation, setEmojiRotation] = useState(init.rot)
   const [cellAspect, setCellAspect] = useState(init.aspect)
 
   const activeEmoji = selectedEmojis[0] ?? '\u{1F600}'
   const emojiUrl = emojiToTwemojiUrl(activeEmoji)
 
-  // Update URL on state change
   useEffect(() => {
     const url = encodePermalink({
       emoji: activeEmoji,
@@ -42,18 +43,19 @@ function App() {
       u: emojiPos.u,
       v: emojiPos.v,
       scale: emojiScale,
+      rot: emojiRotation,
       aspect: cellAspect,
     })
     window.history.replaceState(null, '', url)
-  }, [activeEmoji, group.name, emojiPos.u, emojiPos.v, emojiScale, cellAspect])
+  }, [activeEmoji, group.name, emojiPos.u, emojiPos.v, emojiScale, emojiRotation, cellAspect])
 
   const handlePositionChange = useCallback((u: number, v: number) => {
     setEmojiPos({ u, v })
   }, [])
 
   const handleExportPng = useCallback(() => {
-    exportPng(group, emojiUrl, 120, emojiPos.u, emojiPos.v, emojiScale, cellAspect)
-  }, [group, emojiUrl, emojiPos, emojiScale, cellAspect])
+    exportPng(group, emojiUrl, 120, emojiPos.u, emojiPos.v, emojiScale, emojiRotation, cellAspect)
+  }, [group, emojiUrl, emojiPos, emojiScale, emojiRotation, cellAspect])
 
   const handleCopyLink = useCallback(async () => {
     const url = new URL(window.location.href)
@@ -67,7 +69,6 @@ function App() {
         <Toolbar onExportPng={handleExportPng} onCopyLink={handleCopyLink} />
         <GroupSelector selected={group} onSelect={(g) => {
           setGroup(g)
-          // Reset aspect when switching to a locked group
           if (isAspectLocked(g)) setCellAspect(1)
         }} />
         <CellEditor
@@ -76,15 +77,16 @@ function App() {
           emojiU={emojiPos.u}
           emojiV={emojiPos.v}
           emojiScale={emojiScale}
+          emojiRotation={emojiRotation}
           cellAspect={cellAspect}
           onPositionChange={handlePositionChange}
           onScaleChange={setEmojiScale}
+          onRotationChange={setEmojiRotation}
           onAspectChange={setCellAspect}
         />
         <EmojiPalette
           selectedEmojis={selectedEmojis}
           onSelectionChange={(emojis) => {
-            // Single-select: pick the newly added emoji
             const added = emojis.find(e => !selectedEmojis.includes(e))
             setSelectedEmojis(added ? [added] : emojis.slice(0, 1))
           }}
@@ -96,9 +98,11 @@ function App() {
           emojiUrl={emojiUrl}
           cellAspect={cellAspect}
           emojiScale={emojiScale}
+          emojiRotation={emojiRotation}
           emojiU={emojiPos.u}
           emojiV={emojiPos.v}
           onScaleChange={setEmojiScale}
+          onRotationChange={setEmojiRotation}
           onAspectChange={setCellAspect}
         />
       </div>
